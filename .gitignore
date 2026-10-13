@@ -1,0 +1,15 @@
+# Ignore local environment files at the root and in either application.
+**/.env
+**/.env.*
+!/.env.example
+node_modules/
+.next/
+coverage/
+.vitest/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.test-artifacts/
+*.tsbuildinfo
+*.log
