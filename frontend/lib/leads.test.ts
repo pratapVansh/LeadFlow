@@ -82,6 +82,19 @@ it("applies saved status, note, and schedule to the dashboard summary", () => {
   expect(partitionLeads(result, "qualified", "hank", now).today).toHaveLength(1);
 });
 
+it("removes a cleared follow-up from today's list while preserving its history summary", () => {
+  const { last_note, last_discussion_at, ...fields } = leads[3];
+  const result = upsertLead(leads, {
+    ...fields, follow_up_at: null,
+    discussions: [{ id: 20, note: "Scheduled call", follow_up_at: fields.follow_up_at, created_at: "2026-10-13T06:00:00Z" }],
+  });
+  const { today, others } = partitionLeads(result, "all", "", now);
+  expect(today).toEqual([]);
+  expect(others).toHaveLength(leads.length);
+  expect(others.find((lead) => lead.id === fields.id)).toMatchObject({ follow_up_at: null, last_note: "Scheduled call" });
+  expect(leads[3].follow_up_at).not.toBeNull();
+});
+
 it("keeps deterministic activity ordering when only status changes", () => {
   const { last_note, last_discussion_at, ...fields } = leads[0];
   const result = upsertLead(leads, { ...fields, status: "won", discussions: [] });

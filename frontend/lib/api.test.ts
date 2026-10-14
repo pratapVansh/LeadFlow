@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { addDiscussion, createLead, getLead, getLeads, updateStatus } from "./api";
+import { addDiscussion, clearFollowUp, createLead, getLead, getLeads, updateStatus } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -42,6 +42,19 @@ it("sends the correct lead creation, status, and discussion contracts", async ()
     ["/api/leads/12/discussions", "POST", { note: "A call" }, { "Content-Type": "application/json" }],
     ["/api/leads/12/discussions", "POST", { note: "Scheduled", follow_up_at: "2099-01-01T09:00:00Z" }, { "Content-Type": "application/json" }],
   ]);
+});
+
+it("clears the active follow-up and returns the saved detail", async () => {
+  const detail = { id: 12, follow_up_at: null, discussions: [] };
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(detail)));
+  vi.stubGlobal("fetch", fetchMock);
+  expect(await clearFollowUp(12)).toEqual(detail);
+  expect(fetchMock).toHaveBeenCalledWith("/api/leads/12/follow-up", { cache: "no-store", method: "DELETE" });
+});
+
+it("reports a failed follow-up clear", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{"detail":"Database unavailable. Please try again."}', { status: 503 })));
+  await expect(clearFollowUp(12)).rejects.toThrow("Database unavailable. Please try again.");
 });
 
 it("displays backend validation messages without the Pydantic prefix", async () => {

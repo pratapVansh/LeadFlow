@@ -35,6 +35,7 @@ Stopping or recreating containers preserves the named PostgreSQL volume. To remo
 - Click **Add New Lead**, enter a name, and save. Company and phone are optional; new leads start as New.
 - Click a lead to open its timeline without leaving the dashboard. Change status directly, or add a discussion note.
 - Enable scheduling to choose a future date and time. Both fields are required when enabled.
+- Click **Clear follow-up** beside the active schedule in a lead's timeline after completing the follow-up. No discussion note is required; discussion history stays intact.
 
 Dates and today's follow-ups use the browser's local time zone; the database stores UTC instants. Past-due follow-ups appear in red. Each lead has one active schedule. A note without a new schedule preserves it; a new schedule replaces it while preserving historical discussion schedules. Status changes also preserve schedules, including Won and Lost. Successful saves update the UI immediately; failed saves retain your inputs.
 
@@ -171,6 +172,7 @@ Full request/response schemas are available at `/docs` and `/openapi.json` on th
 | POST | `/api/leads` | Create a New lead; required `name`, optional `company`/`phone` |
 | GET | `/api/leads/{id}` | Details and reverse chronological discussions |
 | PATCH | `/api/leads/{id}` | Update `status` and return details |
+| DELETE | `/api/leads/{id}/follow-up` | Clear the active follow-up and return details; preserve discussion history |
 | POST | `/api/leads/{id}/discussions` | Save `note` and optional `follow_up_at` atomically; return details |
 
 Status values: `new`, `contacted`, `qualified`, `proposal_sent`, `won`, `lost`. Names and company values allow 200 characters, phone 50, and notes 5,000. Blank names/notes, unknown fields, invalid statuses, and non-future or offset-free follow-up timestamps return 422. Missing leads return 404. Database failures return a generic 503 and roll back writes.

@@ -77,6 +77,7 @@ def test_invalid_status_update_keeps_existing_state(client, payload):
     ("get", "/api/leads/999999", None),
     ("patch", "/api/leads/999999", {"status": "contacted"}),
     ("post", "/api/leads/999999/discussions", {"note": "A discussion"}),
+    ("delete", "/api/leads/999999/follow-up", None),
 ])
 def test_missing_lead_returns_404(client, method, path, payload):
     response = client.request(method, path, json=payload)
@@ -86,6 +87,7 @@ def test_missing_lead_returns_404(client, method, path, payload):
 
 def test_non_integer_lead_id_is_rejected(client):
     assert client.get("/api/leads/not-an-id").status_code == 422
+    assert client.delete("/api/leads/not-an-id/follow-up").status_code == 422
 
 
 def test_discussions_and_dashboard_show_latest_note(client):
@@ -165,6 +167,52 @@ def test_follow_up_replacement_preservation_and_utc_conversion(client):
     assert datetime.fromisoformat(client.get("/api/leads").json()[0]["follow_up_at"]) == replacement
     closed = client.patch(f"/api/leads/{lead['id']}", json={"status": "won"})
     assert closed.json()["follow_up_at"] == detail["follow_up_at"]
+
+
+def test_clear_follow_up_preserves_history_and_status(client):
+    lead = create_lead(client)
+    path = f"/api/leads/{lead['id']}"
+    scheduled = client.post(
+        f"{path}/discussions",
+        json={"note": "Schedule a call", "follow_up_at": (utcnow() + timedelta(days=1)).isoformat()},
+    ).json()
+    client.patch(path, json={"status": "qualified"})
+    response = client.delete(f"{path}/follow-up")
+    assert response.status_code == 200
+    cleared = response.json()
+    assert cleared["follow_up_at"] is None
+    assert cleared["status"] == "qualified"
+    assert cleared["discussions"] == scheduled["discussions"]
+    assert client.get(path).json() == cleared
+    assert client.get("/api/leads").json()[0]["follow_up_at"] is None
+    assert client.delete(f"{path}/follow-up").json() == cleared
+    client.post(f"{path}/discussions", json={"note": "Call completed"})
+    assert client.get(path).json()["follow_up_at"] is None
+    rescheduled = client.post(
+        f"{path}/discussions",
+        json={"note": "Next call", "follow_up_at": (utcnow() + timedelta(days=2)).isoformat()},
+    )
+    assert rescheduled.status_code == 201
+    assert rescheduled.json()["follow_up_at"] is not None
+
+
+def test_failed_clear_follow_up_rolls_back(client, db, monkeypatch):
+    lead = create_lead(client)
+    path = f"/api/leads/{lead['id']}"
+    scheduled = client.post(
+        f"{path}/discussions",
+        json={"note": "Schedule a call", "follow_up_at": (utcnow() + timedelta(days=1)).isoformat()},
+    ).json()
+
+    def fail_commit():
+        db.flush()
+        raise SQLAlchemyError("private database details must not escape")
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+    response = client.delete(f"{path}/follow-up")
+    assert response.status_code == 503
+    assert "private" not in response.text
+    assert client.get(path).json() == scheduled
 
 
 @pytest.mark.parametrize("follow_up", [

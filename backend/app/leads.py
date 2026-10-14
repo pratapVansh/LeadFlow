@@ -63,6 +63,14 @@ def update_status(lead_id: int, body: StatusUpdate, db: Database) -> Lead:
     return find_lead(db, lead_id)
 
 
+@router.delete("/{lead_id}/follow-up", response_model=LeadDetail)
+def clear_follow_up(lead_id: int, db: Database) -> Lead:
+    lead = find_lead(db, lead_id)
+    lead.follow_up_at = None
+    db.commit()
+    return find_lead(db, lead_id)
+
+
 @router.post("/{lead_id}/discussions", response_model=LeadDetail, status_code=201)
 def add_discussion(lead_id: int, body: DiscussionCreate, db: Database) -> Lead:
     lead = find_lead(db, lead_id)

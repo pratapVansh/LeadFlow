@@ -40,6 +40,10 @@ export function updateStatus(id: number, status: LeadStatus): Promise<LeadDetail
   return request(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
 }
 
+export function clearFollowUp(id: number): Promise<LeadDetail> {
+  return request(`/api/leads/${id}/follow-up`, { method: "DELETE" });
+}
+
 export function addDiscussion(id: number, body: DiscussionCreate): Promise<LeadDetail> {
   return request(`/api/leads/${id}/discussions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
