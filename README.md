@@ -1,91 +1,118 @@
 # LeadFlow
 
-A small lead management app built with Next.js, TypeScript, Tailwind CSS, FastAPI, and PostgreSQL. The dashboard and dialogs follow the three reference images retained in this folder.
+A lead tracker built with Next.js, FastAPI, and PostgreSQL. Manage leads, discussion history, statuses, and follow-ups.
 
-## Run with Docker
+## Start with Docker
 
-Install Docker Desktop with Linux containers and Docker Compose. From the project root, run:
+Install **Git** and **Docker Desktop**. Start Docker Desktop with Linux containers. You do not need Python or Node.js for this option.
+
+The commands below use PowerShell.
+
+### 1. Open the project
+
+For a new checkout:
+
+```powershell
+git clone https://github.com/pratapVansh/LeadFlow.git "$env:USERPROFILE\source\LeadFlow"
+Set-Location "$env:USERPROFILE\source\LeadFlow"
+```
+
+Already cloned? Open a terminal in your project folder instead. On Windows, keep it **outside OneDrive**; cloud file tags can cause Docker's `invalid file request Dockerfile` error.
+
+### 2. Create your configuration
+
+From the project root:
 
 ```powershell
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+Open **`.env`** and replace the password placeholder before your first startup. The other values are usable defaults:
+
+```dotenv
+POSTGRES_USER=leadflow
+POSTGRES_PASSWORD='replace_with_a_strong_password'
+POSTGRES_DB=leadflow
+POSTGRES_TEST_DB=leadflow_test
+POSTGRES_PORT=5433
+FRONTEND_PORT=3000
+BACKEND_PORT=8000
+```
+
+- `POSTGRES_USER` / `POSTGRES_PASSWORD`: database login.
+- `POSTGRES_DB`: application database.
+- `POSTGRES_TEST_DB`: separate test database; its name must end in `_test`.
+- The three ports control access from your computer. Change them if a port is already in use.
+
+Keep real credentials only in the root `.env`, which Git ignores. Commit `.env.example` with placeholders. No backend/frontend environment files or database URLs are needed.
+
+**Existing database:** keep its current credentials. Editing `.env` does not change the password stored in PostgreSQL.
+
+### 3. Build and start
+
+```powershell
 docker compose up --build -d --wait
 docker compose ps
 ```
 
-Copy the example only on first setup; preserve an existing `.env`.
+Open these addresses with the default ports:
 
-- App: http://localhost:3000
-- Interactive API documentation: http://localhost:8000/docs
-- Database health: http://localhost:8000/api/health
-- PostgreSQL: localhost:5433, database/user/password `leadflow` by default.
+| Service | Address |
+| --- | --- |
+| App | http://localhost:3000 |
+| API documentation | http://localhost:8000/docs |
+| Database health | http://localhost:8000/api/health |
 
-The frontend forwards `/api` requests to FastAPI, so browser requests use the same origin. Published Docker ports bind to localhost. Backend startup creates the schema and seeds an empty database. Database and backend health checks control startup order.
+Startup creates the tables and adds **6 sample leads with 3 discussions each** when the leads table is empty. Existing records are preserved.
 
-```powershell
-docker compose logs --tail 100 backend frontend
-docker compose stop
-docker compose up -d --wait
+## How it works
+
+```mermaid
+flowchart LR
+    Browser["Browser"] -->|"Pages and /api requests"| Frontend["Next.js · port 3000"]
+    Frontend -->|"HTTP API proxy"| Backend["FastAPI · port 8000"]
+    Backend -->|"SQLAlchemy queries and transactions"| Database[("PostgreSQL · port 5432")]
 ```
 
-Stopping or recreating containers preserves the named PostgreSQL volume. To remove containers while preserving data, use `docker compose down`.
+The browser uses the frontend's `/api` address. Next.js forwards requests to FastAPI, which validates input and saves changes in PostgreSQL. Successful responses update the list immediately.
+
+Docker uses `backend:8000` and `db:5432` internally. The database is accessible from your computer on `POSTGRES_PORT` (5433 by default). Its named volume keeps data across container restarts.
 
 ## Use the app
 
-- Search by lead name and select a status filter. Both apply to today's follow-ups and the main list.
-- Click **Add New Lead**, enter a name, and save. Company and phone are optional; new leads start as New.
-- Click a lead to open its timeline without leaving the dashboard. Change status directly, or add a discussion note.
-- Enable scheduling to choose a future date and time. Both fields are required when enabled.
-- Click **Clear follow-up** beside the active schedule in a lead's timeline after completing the follow-up. No discussion note is required; discussion history stays intact.
+- **Add New Lead:** name is required; company and phone are optional. Status starts as New.
+- **Filters and search:** filter by any of six statuses or search by name. Today's follow-ups appear first; overdue reminders are red.
+- **Timeline:** click a lead to see discussions newest first, add a note, or change status.
+- **Set Follow-up:** choose a future date and time. **Clear follow-up** removes the active reminder while keeping discussion history.
 
-Dates and today's follow-ups use the browser's local time zone; the database stores UTC instants. Past-due follow-ups appear in red. Each lead has one active schedule. A note without a new schedule preserves it; a new schedule replaces it while preserving historical discussion schedules. Status changes also preserve schedules, including Won and Lost. Successful saves update the UI immediately; failed saves retain your inputs.
+Saving a note without a new schedule, or changing status, preserves the active reminder. Dates display in your local time zone and are stored in UTC.
 
-## Configuration
+## Stop, restart, and logs
 
-Root `.env` is the single source of shared credentials, database names, and published ports for Docker and local development. Root `.env.example` is the only application template; copy it once without overwriting an existing `.env`. Local environment files are ignored by Git and excluded from Docker images. Backend/frontend environment files are no longer needed.
+Run these from the project root:
 
-| Variable | Purpose |
+| Action | Command |
 | --- | --- |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Shared PostgreSQL credentials and application database |
-| `POSTGRES_TEST_DB` | Separate, empty test database; its name must end in `_test` |
-| `POSTGRES_PORT` | Host database port; default 5433 avoids a common conflict on 5432 |
-| `FRONTEND_PORT`, `BACKEND_PORT` | Host HTTP ports; default 3000 and 8000 |
+| View recent logs | `docker compose logs --tail 100 backend frontend` |
+| Stop services | `docker compose stop` |
+| Start them again | `docker compose up -d --wait` |
+| Rebuild after code changes | `docker compose up --build -d --wait` |
+| Remove containers, keep data | `docker compose down` |
 
-Addresses are mapped explicitly rather than copied into multiple files:
+**`docker compose down -v` deletes the database volume and all leads/discussions.** Use it only when you intend to reset your data.
 
-| Connection | Docker | Local development |
-| --- | --- | --- |
-| Backend to PostgreSQL | `db:5432` | `localhost:POSTGRES_PORT` |
-| Next.js to FastAPI | `http://backend:8000` | `http://localhost:BACKEND_PORT` |
-| Frontend HTTP server | Internal 3000, published as `FRONTEND_PORT` | `127.0.0.1:FRONTEND_PORT` |
-| Backend HTTP server | Internal 8000, published as `BACKEND_PORT` | `127.0.0.1:BACKEND_PORT` |
+## Local development (optional)
 
-The backend loads the root file by absolute path for local processes. Compose injects the same PostgreSQL settings plus the Docker host/port mapping. SQLAlchemy constructs the application and test database URLs safely from raw credentials, including passwords with URL-special characters; do not store or manually encode complete URLs. Quote passwords containing `#` or `$` with single quotes. Root values are literal, not references to other environment variables.
+Requires **Python 3.12**, **Node.js 22.12+**, and the root `.env` from step 2.
 
-The frontend npm launcher reads root configuration, selects the ports it needs, computes the local API address, and passes no PostgreSQL settings or database URLs to the Next.js child process. It also removes inherited database settings from the child's environment. Docker supplies the API address directly, so its frontend never needs the root file. Browser requests remain `/api` in both modes. Do not copy root `.env` into the frontend or use `NEXT_PUBLIC_*` for credentials.
-
-Shell/process variables override shared file values. Missing/empty required settings and invalid local ports fail clearly. `DATABASE_URL` and `TEST_DATABASE_URL` are no longer configuration inputs; the backend derives URL objects. `API_INTERNAL_URL` is injected by the frontend launcher or Docker. Do not retain legacy application `.env` files as a second configuration source.
-
-The root `.env` in this workspace retains the verified credentials of the existing database. Changing PostgreSQL initialization settings does not update an already initialized volume. Preserve current credentials for existing data; credential rotation requires updating the database role explicitly and then updating root credentials. This configuration change does not rotate passwords, delete the volume, or reset data.
-
-Change shared ports only in root `.env`, then restart local processes or rerun `docker compose up -d --wait`. Docker service-to-service ports remain fixed. Next.js production rewrites are built with the selected API address; rebuild the frontend if that address changes.
-
-## Local development
-
-Use Python 3.12 and Node.js 22.12 or newer; the Docker images use Python 3.12 and Node.js 22. The commands below use PowerShell and a virtual environment without requiring activation.
-
-From the root, copy `.env.example` to `.env` once, then start PostgreSQL:
+From the project root, start the database. If Docker's HTTP services are already running, stop them to free their ports:
 
 ```powershell
 docker compose up -d --wait db
-```
-
-If the full Docker app is already running, stop its HTTP services to free ports for local processes:
-
-```powershell
 docker compose stop frontend backend
 ```
 
-In a backend terminal:
+**Terminal 1 — backend**, starting from the project root:
 
 ```powershell
 Set-Location backend
@@ -95,9 +122,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m app.local
 ```
 
-The local launcher uses root `BACKEND_PORT` and enables Uvicorn reload. Seed and test commands use the same root settings automatically; no backend `.env` is required.
-
-In a separate terminal from the root:
+**Terminal 2 — frontend**, starting from the project root:
 
 ```powershell
 Set-Location frontend
@@ -105,97 +130,30 @@ npm ci
 npm run dev
 ```
 
-The npm launcher derives the API address from root `BACKEND_PORT` and serves Next.js on root `FRONTEND_PORT`. `npm run build` and `npm start` use the same mapping locally. No frontend `.env.local` is required, and no database credentials are passed to Next.js.
+Both launchers read the root configuration. Install Node dependencies on the operating system where you run them; Windows and Linux native binaries differ.
 
-Run `npm ci` on the operating system where you will run Node. Native dependency binaries differ between Windows and Linux containers.
+## Tests
 
-## Seed data
-
-The seed contains six leads, one for each status, with three discussions each. It includes today's, overdue, future, and unscheduled follow-ups, relative to the first seed run. Seed data is added only when the leads table is empty. Restarting the backend preserves existing leads and skips seeding; it does not refresh dates each day. Consequently, today's seeded follow-ups can become overdue on later days.
-
-To run the seed manually with Docker:
-
-```powershell
-docker compose exec -T backend python -m app.seed
-```
-
-## Tests and checks
-
-Backend tests use real PostgreSQL with per-test transaction rollback. Create the separate test database **once**, after starting Compose:
+Start the full Docker app using step 3; stop local servers first if they use the same ports. Create an empty test database **once** using your configured `POSTGRES_USER` and `POSTGRES_TEST_DB`. With the defaults above:
 
 ```powershell
 docker compose exec -T db createdb -U leadflow leadflow_test
-```
-
-An existing test database does not need to be recreated. Both runtimes derive the test connection from `POSTGRES_TEST_DB` and shared credentials; run:
-
-```powershell
 docker compose exec -T backend python -m pytest -q
 docker compose exec -T backend python -m pip check
 docker compose config --quiet
 ```
 
-The `createdb` example uses the sample PostgreSQL user and test database name. If your configuration differs, use `POSTGRES_USER` and `POSTGRES_TEST_DB`. The test runner refuses the application database, a name without the `_test` suffix, or a database containing leads. Never point tests at application data.
+Skip `createdb` if the test database already exists. Backend tests refuse the application database or a test database containing leads.
 
-For local backend tests, from `backend` after installing dependencies:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-From `frontend`, after installing dependencies on your host:
+For frontend checks, install Node.js and run these from `frontend`:
 
 ```powershell
+npm ci
 npm test
 npm run typecheck
 npm run build
 ```
 
-The frontend runtime image contains the production build, rather than test source files. Run frontend tests from the source directory. `docker compose build` also runs the frontend production build and its TypeScript checks.
+## Scope
 
-Tests cover validation, status/history writes, rollback, seeding, local environment loading, process-variable precedence, missing configuration, local-day and daylight-saving boundaries, filtering, immediate state updates, and API errors. Chromium checks cover actual database-backed dialog saves, failed requests, keyboard focus, responsive layouts, reloads, and restart persistence. Browser tools and screenshots are kept in ignored `.test-artifacts`; they are not app dependencies.
-
-Verified after the root configuration refactor: 66 backend tests, 59 frontend tests, independent TypeScript checking, Docker and local production builds, Docker startup, and Chromium checks through both Docker and local API mappings. Full application data and credentials remained unchanged; the test database is empty. Details are recorded in `PLAN.md`.
-
-Local development and production startup checks ran in Linux containers using the documented Python/npm commands. The check backend used `POSTGRES_HOST=host.docker.internal` to access the published host database port, while backend/frontend shared a network namespace for localhost API requests. Native Windows servers were not run; install dependencies on Windows before using its virtual environment or Node binaries.
-
-The pinned Starlette/HTTPX TestClient combination emits an upstream deprecation warning; the backend tests still pass.
-
-## API
-
-Full request/response schemas are available at `/docs` and `/openapi.json` on the backend.
-
-| Method | Path | Behavior |
-| --- | --- | --- |
-| GET | `/api/health` | Check database connectivity |
-| GET | `/api/leads` | Dashboard summaries, ordered by latest discussion or creation time |
-| POST | `/api/leads` | Create a New lead; required `name`, optional `company`/`phone` |
-| GET | `/api/leads/{id}` | Details and reverse chronological discussions |
-| PATCH | `/api/leads/{id}` | Update `status` and return details |
-| DELETE | `/api/leads/{id}/follow-up` | Clear the active follow-up and return details; preserve discussion history |
-| POST | `/api/leads/{id}/discussions` | Save `note` and optional `follow_up_at` atomically; return details |
-
-Status values: `new`, `contacted`, `qualified`, `proposal_sent`, `won`, `lost`. Names and company values allow 200 characters, phone 50, and notes 5,000. Blank names/notes, unknown fields, invalid statuses, and non-future or offset-free follow-up timestamps return 422. Missing leads return 404. Database failures return a generic 503 and roll back writes.
-
-## Project layout and scope
-
-- `frontend/app`: page, layout, and shared styling.
-- `frontend/components`: dashboard, cards, status badges, shared native modal, and both dialogs.
-- `frontend/lib`: API calls, types, date handling, lead state helpers, and unit tests.
-- `backend/app`: database models, validation, routes, error handlers, and seed data.
-- `backend/tests`: PostgreSQL-backed API and data tests.
-- `compose.yaml`, Dockerfiles, `.env.example`: local runtime and configuration.
-- `PLAN.md`: implementation phases and verification record.
-
-This is a local assessment app without authentication, pagination, deletion, notifications, or multi-user synchronization. SQLAlchemy creates the initial schema; later schema changes need explicit migrations. Dashboard queries load discussion histories for a small dataset; larger datasets need pagination and narrower queries. Browser verification used Chromium; Firefox and Safari have not been checked.
-
-## Reset data
-
-The following commands permanently delete this Compose project's database volume, including every lead and discussion. Use them only when you intend to discard all data and start again:
-
-```powershell
-docker compose down -v
-docker compose up --build -d --wait
-```
-
-The new empty database receives the six seed leads. This destructive reset was not run against the application database during verification.
+This is a local assessment app without authentication. Published Docker ports bind to localhost. Initial tables are created automatically; schema migrations are not included.

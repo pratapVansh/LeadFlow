@@ -84,6 +84,7 @@ export default function LeadTimelineDialog({ leadId, now, onClose, onSaved }: {
       setFollowUp(false);
       setDate("");
       setTime("");
+      onClose();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not save this discussion. Please try again.");
     } finally {
